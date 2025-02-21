@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: uptime_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: myPassword
+      POSTGRES_DB: mydb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - uptime_network
+
+volumes:
+  postgres_data:
+
+networks:
+  uptime_network:

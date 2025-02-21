@@ -1,0 +1,21 @@
+{
+  "name": "encore-ts-starter",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Encore Typescript Starter",
+  "license": "MPL-2.0",
+  "type": "module",
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/jsonwebtoken": "^9.0.8",
+    "@types/node": "^20.5.7",
+    "typescript": "^5.2.2"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.4.1",
+    "bcrypt": "^5.1.1",
+    "encore.dev": "^1.46.4",
+    "jsonwebtoken": "^9.0.2",
+    "prisma": "^6.4.1"
+  }
+}
