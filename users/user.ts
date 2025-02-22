@@ -1,4 +1,4 @@
-import { api } from "encore.dev/api";
+import { api, APIError } from "encore.dev/api";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -37,15 +37,17 @@ interface DeleteUserResponse {
   message: string;
 }
 
-export const deleteUser = api(
-  { method: "DELETE", path: "/auth/users/:id" },
-  async ({ id }: DeleteUserRequest): Promise<DeleteUserResponse> => {
-    const user = await prisma.user.findUnique({ where: { id } });
+export const deleteUser = api<DeleteUserRequest>(
+  {
+    method: "DELETE",
+    path: "/auth/users/:id",
+  },
+  async (params: DeleteUserRequest): Promise<DeleteUserResponse> => {
+    const user = await prisma.user.findUnique({ where: { id: params.id } });
     if (!user) {
-      throw new Error("User not found");
+      return { message: `User with ID ${params.id} not found` };
     }
-
-    await prisma.user.delete({ where: { id } });
-    return { message: `User with ID ${id} has been deleted` };
+    await prisma.user.delete({ where: { id: params.id } });
+    return { message: `User with ID ${params.id} has been deleted` };
   }
 );
