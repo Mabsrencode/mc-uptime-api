@@ -41,7 +41,7 @@ export const deleteUser = api<DeleteUserRequest>(
   {
     method: "DELETE",
     path: "/users/:id",
-    auth: true, // Added auth protection
+    auth: true,
   },
   async (params: DeleteUserRequest): Promise<DeleteUserResponse> => {
     const user = await prisma.user.findUnique({ where: { id: params.id } });

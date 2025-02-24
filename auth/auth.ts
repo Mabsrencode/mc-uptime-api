@@ -85,7 +85,7 @@ export const register = api(
     const mailOptions = {
       from: environments.EMAIL_USER,
       to: email,
-      subject: "Your OTP for Registration",
+      subject: "Your OTP for Registration on MC Uptime Monitoring",
       text: `Your OTP is: ${otp}`,
     };
 
@@ -147,7 +147,7 @@ export const login = api(
     }
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      throw APIError.permissionDenied("Invalid email or password");
+      throw APIError.permissionDenied("User not found");
     }
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) {
