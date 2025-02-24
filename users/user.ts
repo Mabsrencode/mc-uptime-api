@@ -15,7 +15,7 @@ interface ListUsersResponse {
 }
 
 export const listUsers = api(
-  { method: "GET", path: "/auth/users" },
+  { method: "GET", path: "/users", auth: true },
   async (): Promise<ListUsersResponse> => {
     const users = await prisma.user.findMany({
       select: {
@@ -40,7 +40,8 @@ interface DeleteUserResponse {
 export const deleteUser = api<DeleteUserRequest>(
   {
     method: "DELETE",
-    path: "/auth/users/:id",
+    path: "/users/:id",
+    auth: true, // Added auth protection
   },
   async (params: DeleteUserRequest): Promise<DeleteUserResponse> => {
     const user = await prisma.user.findUnique({ where: { id: params.id } });

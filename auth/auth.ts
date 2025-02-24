@@ -3,20 +3,26 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { PrismaClient } from "@prisma/client";
 import { authHandler } from "encore.dev/auth";
-import { getAuthData } from "~encore/auth";
 import environments from "../lib/environments";
+import nodemailer from "nodemailer";
+import otpGenerator from "otp-generator";
 
 const prisma = new PrismaClient();
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: environments.EMAIL_USER,
+    pass: environments.EMAIL_PASS,
+  },
+});
+
+const otpCache: { [email: string]: { otp: string; expiresAt: number } } = {};
 
 interface AuthParams {
   authorization: Header<"Authorization">;
 }
-interface RegisterRequest {
-  email: string;
-  password: string;
-}
-
-interface LoginRequest {
+interface AuthRequest {
   email: string;
   password: string;
 }
@@ -24,50 +30,98 @@ interface LoginRequest {
 interface AuthResponse {
   token: string;
 }
+interface AuthData {
+  userID: string;
+}
 
-export const myAuthHandler = authHandler(
-  async (params: AuthParams): Promise<{ userID: string }> => {
+export const auth = authHandler<AuthParams, AuthData>(
+  async (params: AuthParams): Promise<AuthData> => {
     const token = params.authorization?.replace("Bearer ", "");
-
     if (!token) {
       throw APIError.unauthenticated("No token provided");
     }
 
-    try {
-      const decoded = jwt.verify(token, environments.JWT) as { userId: string };
-      return { userID: decoded.userId };
-    } catch (error) {
-      throw APIError.unauthenticated("Invalid token");
-    }
-  }
-);
-
-export const gateway = new Gateway({ authHandler: myAuthHandler });
-
-export const dashboardEndpoint = api(
-  { auth: true, method: "GET", path: "/dashboard" },
-  async (): Promise<{ message: string; userID: string }> => {
-    const authData = getAuthData();
-    if (!authData) {
-      throw APIError.unauthenticated("Authentication data is missing");
-    }
-    return {
-      message: `Welcome to the dashboard, user ${authData.userID}!`,
-      userID: authData.userID,
+    const decoded = jwt.verify(token, environments.JWT) as {
+      userID?: string;
+      exp?: number;
     };
+
+    if (!decoded || !decoded.userID) {
+      throw APIError.unauthenticated("Invalid token payload");
+    }
+
+    if (decoded.exp && decoded.exp < Math.floor(Date.now() / 1000)) {
+      throw APIError.unauthenticated("Token has expired");
+    }
+
+    return { userID: decoded.userID?.toString() };
   }
 );
+
+export const gateway = new Gateway({ authHandler: auth });
 
 export const register = api(
   { method: "POST", path: "/auth/register" },
-  async ({ email, password }: RegisterRequest): Promise<AuthResponse> => {
+  async ({ email, password }: AuthRequest): Promise<{ message: string }> => {
     if (!email || !password) {
       throw APIError.permissionDenied("Missing email or password");
     }
+
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       throw APIError.alreadyExists("User already exists");
     }
+    const otp = otpGenerator.generate(6, {
+      digits: true,
+      lowerCaseAlphabets: false,
+      upperCaseAlphabets: false,
+      specialChars: false,
+    });
+    otpCache[email] = {
+      otp,
+      expiresAt: Date.now() + 5 * 60 * 1000,
+    };
+
+    const mailOptions = {
+      from: environments.EMAIL_USER,
+      to: email,
+      subject: "Your OTP for Registration",
+      text: `Your OTP is: ${otp}`,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    return {
+      message:
+        "OTP sent to your email. Please verify to complete registration.",
+    };
+  }
+);
+
+export const verifyOtpAndRegister = api(
+  { method: "POST", path: "/auth/verify-otp" },
+  async ({
+    email,
+    password,
+    otp,
+  }: {
+    email: string;
+    password: string;
+    otp: string;
+  }): Promise<AuthResponse> => {
+    if (!email || !password || !otp) {
+      throw APIError.permissionDenied("Missing email, password, or OTP");
+    }
+
+    const cachedOtp = otpCache[email];
+    if (!cachedOtp || cachedOtp.otp !== otp) {
+      throw APIError.permissionDenied("Invalid OTP");
+    }
+
+    if (cachedOtp.expiresAt < Date.now()) {
+      throw APIError.permissionDenied("OTP has expired");
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
       data: {
@@ -76,16 +130,18 @@ export const register = api(
       },
     });
 
-    const token = jwt.sign({ userId: user.id }, environments.JWT, {
+    const token = jwt.sign({ userID: user.id.toString() }, environments.JWT, {
       expiresIn: "1h",
     });
+    delete otpCache[email];
+
     return { token };
   }
 );
 
 export const login = api(
   { method: "POST", path: "/auth/login" },
-  async ({ email, password }: LoginRequest): Promise<AuthResponse> => {
+  async ({ email, password }: AuthRequest): Promise<AuthResponse> => {
     if (!email || !password) {
       throw APIError.permissionDenied("Missing email or password");
     }
@@ -97,7 +153,7 @@ export const login = api(
     if (!passwordMatch) {
       throw APIError.permissionDenied("Invalid email or password");
     }
-    const token = jwt.sign({ userId: user.id }, environments.JWT, {
+    const token = jwt.sign({ userID: user.id }, environments.JWT, {
       expiresIn: "1h",
     });
     return { token };
