@@ -47,7 +47,7 @@ export const auth = authHandler<AuthParams, AuthData>(
       password?: string;
       exp?: number;
     };
-    if (!decoded || !decoded.userID) {
+    if (!decoded || !decoded.userID || !decoded.password) {
       throw APIError.unauthenticated("Invalid token payload");
     }
 
@@ -163,7 +163,7 @@ export const login = api(
     }
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      throw APIError.permissionDenied("User not found");
+      throw APIError.notFound("User not found");
     }
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) {
