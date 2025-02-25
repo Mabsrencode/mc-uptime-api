@@ -4,7 +4,7 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 interface User {
-  id: number;
+  id: string;
   email: string;
   createdAt: Date;
   updatedAt: Date;
@@ -29,21 +29,36 @@ export const listUsers = api(
   }
 );
 
-interface DeleteUserRequest {
-  id: number;
+interface UserRequest {
+  id: string;
 }
 
 interface DeleteUserResponse {
   message: string;
 }
 
-export const deleteUser = api<DeleteUserRequest>(
+export const getUser = api<UserRequest>(
+  {
+    method: "GET",
+    path: "/user/:id",
+    auth: true,
+  },
+  async (params: UserRequest): Promise<User> => {
+    const user = await prisma.user.findUnique({ where: { id: params.id } });
+    if (!user) {
+      throw APIError.notFound(`User with ID ${params.id} not found`);
+    }
+    return user;
+  }
+);
+
+export const deleteUser = api<UserRequest>(
   {
     method: "DELETE",
     path: "/users/:id",
     auth: true,
   },
-  async (params: DeleteUserRequest): Promise<DeleteUserResponse> => {
+  async (params: UserRequest): Promise<DeleteUserResponse> => {
     const user = await prisma.user.findUnique({ where: { id: params.id } });
     if (!user) {
       return { message: `User with ID ${params.id} not found` };

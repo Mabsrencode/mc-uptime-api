@@ -32,6 +32,7 @@ interface AuthResponse {
 }
 interface AuthData {
   userID: string;
+  authenticated: boolean;
 }
 
 export const auth = authHandler<AuthParams, AuthData>(
@@ -43,9 +44,9 @@ export const auth = authHandler<AuthParams, AuthData>(
 
     const decoded = jwt.verify(token, environments.JWT) as {
       userID?: string;
+      password?: string;
       exp?: number;
     };
-
     if (!decoded || !decoded.userID) {
       throw APIError.unauthenticated("Invalid token payload");
     }
@@ -54,7 +55,18 @@ export const auth = authHandler<AuthParams, AuthData>(
       throw APIError.unauthenticated("Token has expired");
     }
 
-    return { userID: decoded.userID?.toString() };
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userID },
+    });
+    if (!user) {
+      throw APIError.permissionDenied("User not found");
+    }
+    if (!decoded.password) {
+      throw APIError.unauthenticated("Invalid token payload");
+    }
+    const verify = await bcrypt.compare(user.password, decoded.password);
+
+    return { userID: decoded.userID?.toString(), authenticated: verify };
   }
 );
 
@@ -130,9 +142,13 @@ export const verifyOtpAndRegister = api(
       },
     });
 
-    const token = jwt.sign({ userID: user.id.toString() }, environments.JWT, {
-      expiresIn: "1h",
-    });
+    const token = jwt.sign(
+      { userID: user.id.toString(), password: user.password },
+      environments.JWT,
+      {
+        expiresIn: "1h",
+      }
+    );
     delete otpCache[email];
 
     return { token };
@@ -153,9 +169,13 @@ export const login = api(
     if (!passwordMatch) {
       throw APIError.permissionDenied("Invalid email or password");
     }
-    const token = jwt.sign({ userID: user.id }, environments.JWT, {
-      expiresIn: "1h",
-    });
+    const token = jwt.sign(
+      { userID: user.id, password: user.password },
+      environments.JWT,
+      {
+        expiresIn: "1h",
+      }
+    );
     return { token };
   }
 );
