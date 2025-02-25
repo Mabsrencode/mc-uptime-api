@@ -6,7 +6,7 @@ import { authHandler } from "encore.dev/auth";
 import environments from "../lib/environments";
 import nodemailer from "nodemailer";
 import otpGenerator from "otp-generator";
-
+import rateLimitMiddleware from "../rate-limit/rateLimit";
 const prisma = new PrismaClient();
 
 const transporter = nodemailer.createTransport({
@@ -47,7 +47,7 @@ export const auth = authHandler<AuthParams, AuthData>(
       password?: string;
       exp?: number;
     };
-    if (!decoded || !decoded.userID || !decoded.password) {
+    if (!decoded || !decoded.userID) {
       throw APIError.unauthenticated("Invalid token payload");
     }
 
@@ -74,12 +74,18 @@ export const gateway = new Gateway({ authHandler: auth });
 
 export const register = api(
   { method: "POST", path: "/auth/register" },
-  async ({ email, password }: AuthRequest): Promise<{ message: string }> => {
-    if (!email || !password) {
+  async (req: {
+    email: string;
+    password: string;
+    ip?: string;
+  }): Promise<{ message: string }> => {
+    rateLimitMiddleware(req);
+    if (!req.email || !req.password) {
       throw APIError.permissionDenied("Missing email or password");
     }
-
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const existingUser = await prisma.user.findUnique({
+      where: { email: req.email },
+    });
     if (existingUser) {
       throw APIError.alreadyExists("User already exists");
     }
@@ -89,14 +95,14 @@ export const register = api(
       upperCaseAlphabets: false,
       specialChars: false,
     });
-    otpCache[email] = {
+    otpCache[req.email] = {
       otp,
       expiresAt: Date.now() + 5 * 60 * 1000,
     };
 
     const mailOptions = {
       from: environments.EMAIL_USER,
-      to: email,
+      to: req.email,
       subject: "Your OTP for Registration on MC Uptime Monitoring",
       text: `Your OTP is: ${otp}`,
     };
@@ -112,21 +118,19 @@ export const register = api(
 
 export const verifyOtpAndRegister = api(
   { method: "POST", path: "/auth/verify-otp" },
-  async ({
-    email,
-    password,
-    otp,
-  }: {
+  async (req: {
     email: string;
     password: string;
     otp: string;
+    ip?: string;
   }): Promise<AuthResponse> => {
-    if (!email || !password || !otp) {
+    rateLimitMiddleware(req);
+    if (!req.email || !req.password || !req.otp) {
       throw APIError.permissionDenied("Missing email, password, or OTP");
     }
 
-    const cachedOtp = otpCache[email];
-    if (!cachedOtp || cachedOtp.otp !== otp) {
+    const cachedOtp = otpCache[req.email];
+    if (!cachedOtp || cachedOtp.otp !== req.otp) {
       throw APIError.permissionDenied("Invalid OTP");
     }
 
@@ -134,10 +138,10 @@ export const verifyOtpAndRegister = api(
       throw APIError.permissionDenied("OTP has expired");
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(req.password, 10);
     const user = await prisma.user.create({
       data: {
-        email,
+        email: req.email,
         password: hashedPassword,
       },
     });
@@ -149,7 +153,7 @@ export const verifyOtpAndRegister = api(
         expiresIn: "1h",
       }
     );
-    delete otpCache[email];
+    delete otpCache[req.email];
 
     return { token };
   }
@@ -157,17 +161,24 @@ export const verifyOtpAndRegister = api(
 
 export const login = api(
   { method: "POST", path: "/auth/login" },
-  async ({ email, password }: AuthRequest): Promise<AuthResponse> => {
-    if (!email || !password) {
+  async (req: {
+    email: string;
+    password: string;
+    ip?: string;
+  }): Promise<AuthResponse> => {
+    if (!req.email || !req.password) {
       throw APIError.permissionDenied("Missing email or password");
     }
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { email: req.email } });
     if (!user) {
       throw APIError.notFound("User not found");
     }
-    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!user || !(await bcrypt.compare(req.password, user.password))) {
+      throw APIError.permissionDenied("Invalid credentials");
+    }
+    const passwordMatch = await bcrypt.compare(req.password, user.password);
     if (!passwordMatch) {
-      throw APIError.permissionDenied("Invalid email or password");
+      throw APIError.permissionDenied("Password does not match");
     }
     const token = jwt.sign(
       { userID: user.id, password: user.password },
