@@ -22,13 +22,13 @@ const otpCache: { [email: string]: { otp: string; expiresAt: number } } = {};
 interface AuthParams {
   authorization: Header<"Authorization">;
 }
-interface AuthRequest {
+interface AuthResponseUser {
   email: string;
-  password: string;
-}
-
-interface AuthResponse {
   token: string;
+  number?: string;
+}
+interface AuthResponse {
+  user: AuthResponseUser;
 }
 interface AuthData {
   userID: string;
@@ -155,7 +155,7 @@ export const verifyOtpAndRegister = api(
     );
     delete otpCache[req.email];
 
-    return { token };
+    return { user: { email: user.email, token } };
   }
 );
 
@@ -187,6 +187,6 @@ export const login = api(
         expiresIn: "1h",
       }
     );
-    return { token };
+    return { user: { email: user.email, token } };
   }
 );

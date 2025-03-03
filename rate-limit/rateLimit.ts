@@ -6,7 +6,7 @@ const requestCounts = new Map<
 >();
 
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
-const RATE_LIMIT_MAX_REQUESTS = 5;
+const RATE_LIMIT_MAX_REQUESTS = 1000;
 
 export default function rateLimitMiddleware(req: { ip?: string }) {
   const ip = req.ip || "unknown";
