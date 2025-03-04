@@ -27,6 +27,7 @@ model Site {
   id     String  @id @default(uuid())
   url    String  @unique
   userId String 
+  email String 
   checks Check[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
