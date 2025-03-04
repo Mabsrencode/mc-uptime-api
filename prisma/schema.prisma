@@ -14,12 +14,12 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  mobile_number String? @unique
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(uuid())
+  email         String   @unique
+  mobile_number String?  @unique
+  password      String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model UserWebsites {
@@ -28,4 +28,19 @@ model UserWebsites {
   websiteId String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Site {
+  id     String  @id @default(uuid())
+  url    String  @unique
+  checks Check[]
+}
+
+model Check {
+  id        String   @id @default(uuid())
+  siteId    String
+  up        Boolean
+  checkedAt DateTime @default(now())
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
