@@ -1,4 +1,4 @@
-import { api } from "encore.dev/api";
+import { api, APIError, Gateway } from "encore.dev/api";
 import { PrismaClient } from "@prisma/client";
 import { Topic } from "encore.dev/pubsub";
 
@@ -18,10 +18,21 @@ export interface AddParams {
 }
 
 export const add = api(
-  { expose: true, method: "POST", path: "/site" },
-  async (params: AddParams): Promise<Site> => {
+  { expose: true, method: "POST", path: "/site", auth: true },
+  async ({ url, userID }: AddParams & { userID: string }): Promise<Site> => {
+    if (!userID) throw APIError.unauthenticated("User not authenticated");
+    const existingWebsite = await prisma.site.findMany({
+      where: { url: url },
+    });
+    if (existingWebsite) {
+      throw APIError.alreadyExists("URL already exists");
+    }
+
     const site = await prisma.site.create({
-      data: { url: params.url },
+      data: {
+        url,
+        userId: userID,
+      },
     });
 
     await SiteAddedTopic.publish(site);
