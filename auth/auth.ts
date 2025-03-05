@@ -25,6 +25,7 @@ interface AuthParams {
 interface AuthResponseUser {
   email: string;
   token: string;
+  userID: string;
   number?: string;
 }
 interface AuthResponse {
@@ -155,7 +156,7 @@ export const verifyOtpAndRegister = api(
     );
     delete otpCache[req.email];
 
-    return { user: { email: user.email, token } };
+    return { user: { email: user.email, token, userID: user.id } };
   }
 );
 
@@ -187,6 +188,6 @@ export const login = api(
         expiresIn: "1h",
       }
     );
-    return { user: { email: user.email, token } };
+    return { user: { email: user.email, token, userID: user.id } };
   }
 );
