@@ -10,6 +10,10 @@ export interface Site {
   email: string;
 }
 
+export interface UserSites {
+  data: Site[];
+}
+
 export const SiteAddedTopic = new Topic<Site>("site.added", {
   deliveryGuarantee: "at-least-once",
 });
@@ -25,13 +29,12 @@ export const add = api(
     userID,
     email,
   }: AddParams & { userID: string; email: string }): Promise<Site> => {
-    // const existingWebsite = await prisma.site.findMany({
-    //   where: { url: url },
-    // });
-    // console.log(existingWebsite);
-    // if (existingWebsite) {
-    //   throw APIError.alreadyExists("URL already exists");
-    // }
+    const existingWebsite = await prisma.site.findFirst({
+      where: { url: url },
+    });
+    if (existingWebsite) {
+      throw APIError.alreadyExists("URL already exists");
+    }
     if (!userID) throw APIError.unauthenticated("User not authenticated");
 
     const site = await prisma.site.create({
@@ -56,6 +59,17 @@ export const get = api(
 
     if (!site) throw new Error("site not found");
     return site;
+  }
+);
+
+export const getAllSiteByUser = api(
+  { expose: true, method: "GET", path: "/user-sites/:id", auth: true },
+  async ({ userId }: { userId: string }): Promise<UserSites> => {
+    const site = await prisma.site.findMany({
+      where: { userId },
+    });
+    if (!site) throw new Error("site not found");
+    return { data: site };
   }
 );
 

@@ -48,6 +48,7 @@ export const auth = authHandler<AuthParams, AuthData>(
       password?: string;
       exp?: number;
     };
+
     if (!decoded || !decoded.userID) {
       throw APIError.unauthenticated("Invalid token payload");
     }
