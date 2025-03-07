@@ -8,6 +8,7 @@ export interface Site {
   id: string;
   url: string;
   email: string;
+  interval: number;
 }
 
 export interface UserSites {
@@ -28,7 +29,14 @@ export const add = api(
     url,
     userID,
     email,
-  }: AddParams & { userID: string; email: string }): Promise<Site> => {
+    interval,
+    monitorType,
+  }: AddParams & {
+    userID: string;
+    email: string;
+    interval: number;
+    monitorType: string;
+  }): Promise<Site> => {
     const existingWebsite = await prisma.site.findFirst({
       where: { url: url },
     });
@@ -42,6 +50,8 @@ export const add = api(
         url,
         userId: userID,
         email,
+        monitorType,
+        interval,
       },
     });
 
@@ -64,9 +74,9 @@ export const get = api(
 
 export const getAllSiteByUser = api(
   { expose: true, method: "GET", path: "/user-sites/:id", auth: true },
-  async ({ userId }: { userId: string }): Promise<UserSites> => {
+  async ({ id }: { id: string }): Promise<UserSites> => {
     const site = await prisma.site.findMany({
-      where: { userId },
+      where: { userId: id },
     });
     if (!site) throw new Error("site not found");
     return { data: site };

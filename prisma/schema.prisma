@@ -27,6 +27,8 @@ model Site {
   id     String  @id @default(uuid())
   url    String  @unique
   userId String 
+  monitorType String @default("website")
+  interval Int @default(5)
   email String 
   checks Check[]
   createdAt     DateTime @default(now())
