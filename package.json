@@ -10,6 +10,7 @@
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.8",
     "@types/node": "^20.5.7",
+    "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^6.4.17",
     "@types/otp-generator": "^4.0.2",
     "typescript": "^5.2.2"
@@ -20,8 +21,10 @@
     "encore.dev": "^1.46.5",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3",
     "nodemailer": "^6.10.0",
     "otp-generator": "^4.0.1",
-    "prisma": "^6.4.1"
+    "prisma": "^6.4.1",
+    "winston": "^3.17.0"
   }
 }

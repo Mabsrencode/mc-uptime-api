@@ -3,16 +3,19 @@ import { Subscription, Topic } from "encore.dev/pubsub";
 import { Site, SiteAddedTopic } from "../site/site";
 import { ping } from "./ping";
 import { site } from "~encore/clients";
-import { CronJob } from "encore.dev/cron";
+import cron from "node-cron";
 import { PrismaClient } from "@prisma/client";
+import { sendEmail } from "../utils/email";
+import logger from "../utils/loggers";
 
 const prisma = new PrismaClient();
 
 export const check = api(
   { expose: true, method: "POST", path: "/check/:siteID" },
   async (p: { siteID: string }): Promise<{ up: boolean }> => {
-    const s = await site.get({ id: p.siteID });
-    return doCheck(s);
+    const site = await prisma.site.findUnique({ where: { id: p.siteID } });
+    if (!site) throw new Error("Site not found");
+    return doCheck(site);
   }
 );
 
@@ -24,18 +27,46 @@ export const checkAll = api(
   }
 );
 
-const cronJob = new CronJob("check-all", {
-  title: "Check all sites",
-  every: "1h",
-  endpoint: checkAll,
+async function scheduleChecks() {
+  const sites = await prisma.site.findMany();
+
+  sites.forEach((site) => {
+    const cronExpression = getCronExpression(site.interval);
+
+    cron.schedule(cronExpression, async () => {
+      console.log(`Running check for site: ${site.url}`);
+      logger.info(`Running check for site: ${site.url}`);
+      try {
+        await check({ siteID: site.id });
+      } catch (error) {
+        console.error(`Error checking site ${site.url}:`, error);
+        logger.error(`Error checking site ${site.url}:`, error);
+      }
+    });
+  });
+}
+
+function getCronExpression(interval: number): string {
+  if (interval < 1) {
+    throw new Error("Interval must be at least 1 minute");
+  }
+
+  return `*/${interval} * * * *`;
+}
+
+scheduleChecks().catch((err) => {
+  console.error("Failed to schedule checks:", err);
 });
 
 async function doCheck(site: Site): Promise<{ up: boolean }> {
   const { up } = await ping({ url: site.url });
-
+  console.log(up);
   const wasUp = await getPreviousMeasurement(site.id);
   if (up !== wasUp) {
     await TransitionTopic.publish({ site, up });
+    const subject = up ? "Site is back up" : "Site is down";
+    const text = `Your site ${site.url} is ${up ? "up" : "down"}.`;
+    await sendEmail(site.email, subject, text);
   }
 
   await prisma.check.create({
