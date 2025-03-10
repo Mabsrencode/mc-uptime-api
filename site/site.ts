@@ -8,6 +8,7 @@ export interface Site {
   id: string;
   url: string;
   email: string;
+  interval: number;
 }
 
 export interface UserSites {
@@ -28,7 +29,14 @@ export const add = api(
     url,
     userID,
     email,
-  }: AddParams & { userID: string; email: string }): Promise<Site> => {
+    interval,
+    monitorType,
+  }: AddParams & {
+    userID: string;
+    email: string;
+    interval: number;
+    monitorType: string;
+  }): Promise<Site> => {
     const existingWebsite = await prisma.site.findFirst({
       where: { url: url },
     });
@@ -42,6 +50,8 @@ export const add = api(
         url,
         userId: userID,
         email,
+        monitorType,
+        interval,
       },
     });
 

@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Site" ADD COLUMN     "interval" INTEGER NOT NULL DEFAULT 0;
