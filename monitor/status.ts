@@ -14,7 +14,7 @@ interface StatusResponse {
 }
 
 export const status = api(
-  { expose: true, path: "/status", method: "GET" },
+  { expose: true, path: "/status", method: "GET", auth: true },
   async (): Promise<StatusResponse> => {
     const latestChecks = await prisma.check.findMany({
       distinct: ["siteId"],
