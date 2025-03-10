@@ -64,9 +64,9 @@ export const get = api(
 
 export const getAllSiteByUser = api(
   { expose: true, method: "GET", path: "/user-sites/:id", auth: true },
-  async ({ userId }: { userId: string }): Promise<UserSites> => {
+  async ({ id }: { id: string }): Promise<UserSites> => {
     const site = await prisma.site.findMany({
-      where: { userId },
+      where: { userId: id },
     });
     if (!site) throw new Error("site not found");
     return { data: site };
