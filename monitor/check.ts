@@ -69,9 +69,8 @@ function getCronExpression(interval: number): string {
   return `*/${interval} * * * *`;
 }
 
-async function doCheck(site: Site): Promise<{ up: boolean }> {
+async function doCheck(site: Site): Promise<{ up: boolean; error?: string }> {
   const { up, error } = await ping({ url: site.url });
-  console.log(up);
   const wasUp = await getPreviousMeasurement(site.id);
   if (up !== wasUp) {
     await TransitionTopic.publish({ site, up });
@@ -91,7 +90,7 @@ async function doCheck(site: Site): Promise<{ up: boolean }> {
     },
   });
 
-  return { up };
+  return { up, error };
 }
 
 async function getPreviousMeasurement(siteID: string): Promise<boolean> {
