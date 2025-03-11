@@ -1,6 +1,7 @@
 import { api, APIError } from "encore.dev/api";
 import { PrismaClient } from "@prisma/client";
 import { Topic } from "encore.dev/pubsub";
+import { scheduleSiteCheck, stopSiteCheck } from "../monitor/check";
 
 const prisma = new PrismaClient();
 
@@ -56,6 +57,8 @@ export const add = api(
     });
 
     await SiteAddedTopic.publish(site);
+    scheduleSiteCheck(site);
+
     return site;
   }
 );
@@ -86,6 +89,8 @@ export const getAllSiteByUser = api(
 export const del = api(
   { expose: true, method: "DELETE", path: "/site/:id" },
   async ({ id }: { id: string }): Promise<void> => {
+    stopSiteCheck(id);
+
     await prisma.site.delete({
       where: { id },
     });
@@ -101,5 +106,19 @@ export const list = api(
   async (): Promise<ListResponse> => {
     const sites = await prisma.site.findMany();
     return { sites };
+  }
+);
+
+export const update = api(
+  { expose: true, method: "PUT", path: "/site/:id" },
+  async ({ id, interval }: { id: string; interval: number }): Promise<Site> => {
+    const site = await prisma.site.update({
+      where: { id },
+      data: { interval },
+    });
+    stopSiteCheck(id);
+    scheduleSiteCheck(site);
+
+    return site;
   }
 );

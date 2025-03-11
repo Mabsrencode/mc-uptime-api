@@ -6,6 +6,7 @@ export interface PingParams {
 
 export interface PingResponse {
   up: boolean;
+  error?: string;
 }
 
 export const ping = api<PingParams, PingResponse>(
@@ -18,9 +19,15 @@ export const ping = api<PingParams, PingResponse>(
     try {
       const resp = await fetch(url, { method: "GET" });
       const up = resp.status >= 200 && resp.status < 300;
+      if (!up) {
+        return { up, error: `HTTP Status: ${resp.status} ${resp.statusText}` };
+      }
       return { up };
     } catch (err) {
-      return { up: false };
+      return {
+        up: false,
+        error: err instanceof Error ? err.message : "Unknown error",
+      };
     }
   }
 );

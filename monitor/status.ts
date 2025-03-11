@@ -7,6 +7,7 @@ interface SiteStatus {
   id: string;
   up: boolean;
   checkedAt: string;
+  error?: string | null;
 }
 
 interface StatusResponse {
@@ -23,6 +24,7 @@ export const status = api(
         siteId: true,
         up: true,
         checkedAt: true,
+        error: true,
       },
     });
 
@@ -30,6 +32,7 @@ export const status = api(
       id: row.siteId,
       up: row.up,
       checkedAt: row.checkedAt.toISOString(),
+      error: row.error,
     }));
 
     return { sites: results };
