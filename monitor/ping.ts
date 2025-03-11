@@ -7,6 +7,7 @@ export interface PingParams {
 export interface PingResponse {
   up: boolean;
   error?: string;
+  details?: string;
 }
 
 export const ping = api<PingParams, PingResponse>(
@@ -17,16 +18,40 @@ export const ping = api<PingParams, PingResponse>(
     }
 
     try {
-      const resp = await fetch(url, { method: "GET" });
+      const controller = new AbortController();
+
+      const resp = await fetch(url, {
+        method: "GET",
+        signal: controller.signal,
+      });
+
       const up = resp.status >= 200 && resp.status < 300;
       if (!up) {
-        return { up, error: `HTTP Status: ${resp.status} ${resp.statusText}` };
+        return {
+          up,
+          error: `HTTP Status: ${resp.status} ${resp.statusText}`,
+          details: `Response headers: ${JSON.stringify(
+            Object.fromEntries(resp.headers.entries())
+          )}`,
+        };
       }
       return { up };
     } catch (err) {
+      let errorDetails = "Unknown error";
+      if (err instanceof Error) {
+        if (err.name === "AbortError") {
+          errorDetails =
+            "Request timed out: The server did not respond within 5 seconds.";
+        } else if (err instanceof TypeError) {
+          errorDetails = `Network error: ${err.message}`;
+        } else {
+          errorDetails = `Unexpected error: ${err.message}`;
+        }
+      }
       return {
         up: false,
-        error: err instanceof Error ? err.message : "Unknown error",
+        error: "Fetch failed",
+        details: errorDetails,
       };
     }
   }
