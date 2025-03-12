@@ -165,6 +165,8 @@ export const analyzeSeo = api(
         message: "SEO analysis completed successfully",
       };
     } catch (error) {
+
+//! throw api error
       return {
         url,
         title: "",
