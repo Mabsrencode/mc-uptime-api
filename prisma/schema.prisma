@@ -41,5 +41,6 @@ model Check {
   up        Boolean
   checkedAt DateTime @default(now())
   error     String?
+  details   String?
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }

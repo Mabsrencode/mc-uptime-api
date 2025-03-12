@@ -105,15 +105,17 @@ function calculateSEOScore(
   return Math.max(0, Math.round(score));
 }
 
-export const analyzeSeo = api(
+export const analyzeSeo = api<AnalyzeSEORequest, AnalyzeSEOResponse>(
   {
     method: "GET",
-    path: "/analyze-seo",
+    path: "/analyze-seo/:url",
     expose: true,
   },
-  async ({ url }: AnalyzeSEORequest): Promise<AnalyzeSEOResponse> => {
+  async ({ url }) => {
     const startTime = performance.now();
-
+    if (!url.startsWith("http:") && !url.startsWith("https:")) {
+      url = "https://" + url;
+    }
     try {
       const { data: html } = await axios.get(url);
       const $ = cheerio.load(html);
@@ -165,8 +167,7 @@ export const analyzeSeo = api(
         message: "SEO analysis completed successfully",
       };
     } catch (error) {
-
-//! throw api error
+      //! throw api error
       return {
         url,
         title: "",

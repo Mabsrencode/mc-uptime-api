@@ -7,7 +7,9 @@ interface SiteStatus {
   id: string;
   up: boolean;
   checkedAt: string;
+  incidentId: string;
   error?: string | null;
+  details?: string | null;
 }
 
 interface StatusResponse {
@@ -25,14 +27,18 @@ export const status = api(
         up: true,
         checkedAt: true,
         error: true,
+        details: true,
+        id: true,
       },
     });
 
     const results: SiteStatus[] = latestChecks.map((row) => ({
       id: row.siteId,
       up: row.up,
+      incidentId: row.id,
       checkedAt: row.checkedAt.toISOString(),
       error: row.error,
+      details: row.details,
     }));
 
     return { sites: results };
