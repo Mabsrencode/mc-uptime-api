@@ -5,35 +5,58 @@ const prisma = new PrismaClient();
 
 interface IncidentParams {
   id: string;
+  siteId: string;
 }
 
 interface IncidentResponse {
   id: string;
   up: boolean;
   checkedAt: string;
-  error?: string | null;
-  details?: string | null;
+  error: string | null;
+  details: string | null;
+  siteId: string;
+  url: string;
+  monitorType: string;
+  interval: number;
+  email: string;
+  mobile_number?: string | null;
 }
 
 export const incident = api<IncidentParams, IncidentResponse>(
-  { expose: true, path: "/report/:id", method: "GET", auth: true },
-  async ({ id }) => {
-    const data = await prisma.check.findUnique({
+  { expose: true, path: "/report/:id/:siteId", method: "GET", auth: false },
+  async ({ id, siteId }) => {
+    const incident = await prisma.check.findUnique({
       where: { id: id },
     });
-
+    if (!incident) {
+      throw APIError.notFound("Incident not found");
+    }
+    const incidentData = {
+      id: incident.id,
+      up: incident.up,
+      checkedAt: incident.checkedAt.toISOString(),
+      error: incident.error,
+      details: incident.details,
+    };
+    const site = await prisma.site.findUnique({
+      where: { id: siteId },
+    });
+    if (!site) {
+      throw APIError.notFound("Site not found");
+    }
+    const siteData = {
+      siteId: site.id,
+      url: site.url,
+      monitorType: site.monitorType,
+      interval: site.interval,
+      email: site.email,
+      mobile_number: site.mobile_number,
+    };
+    const data = { ...incidentData, ...siteData };
     if (!data) {
       throw APIError.notFound("Incident not found");
     }
 
-    const result: IncidentResponse = {
-      id: data.id,
-      up: data.up,
-      checkedAt: data.checkedAt.toISOString(),
-      error: data.error,
-      details: data.details,
-    };
-
-    return result;
+    return data;
   }
 );
