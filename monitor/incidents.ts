@@ -23,7 +23,7 @@ interface IncidentResponse {
 }
 
 export const incident = api<IncidentParams, IncidentResponse>(
-  { expose: true, path: "/report/:id/:siteId", method: "GET", auth: false },
+  { expose: true, path: "/report/:id/:siteId", method: "GET", auth: false },   //! true
   async ({ id, siteId }) => {
     const incident = await prisma.check.findUnique({
       where: { id: id },
