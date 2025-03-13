@@ -10,7 +10,7 @@ export interface Site {
   url: string;
   email: string;
   interval: number;
-  mobile_number?: string | null;
+  // mobile_number?: string | null;
   monitorType: string;
 }
 
@@ -34,13 +34,12 @@ export const add = api(
     email,
     interval,
     monitorType,
-    mobile_number,
   }: AddParams & {
     userID: string;
     email: string;
     interval: number;
     monitorType: string;
-    mobile_number: string;
+    mobile_number?: string;
   }): Promise<Site> => {
     const existingWebsite = await prisma.site.findFirst({
       where: { url: url },
@@ -57,7 +56,6 @@ export const add = api(
         email,
         monitorType,
         interval,
-        mobile_number,
       },
     });
 

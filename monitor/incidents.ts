@@ -19,11 +19,10 @@ interface IncidentResponse {
   monitorType: string;
   interval: number;
   email: string;
-  mobile_number?: string | null;
 }
 
 export const incident = api<IncidentParams, IncidentResponse>(
-  { expose: true, path: "/report/:id/:siteId", method: "GET", auth: false },   //! true
+  { expose: true, path: "/report/:id/:siteId", method: "GET", auth: true },
   async ({ id, siteId }) => {
     const incident = await prisma.check.findUnique({
       where: { id: id },
@@ -50,7 +49,6 @@ export const incident = api<IncidentParams, IncidentResponse>(
       monitorType: site.monitorType,
       interval: site.interval,
       email: site.email,
-      mobile_number: site.mobile_number,
     };
     const data = { ...incidentData, ...siteData };
     if (!data) {
