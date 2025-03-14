@@ -26,6 +26,7 @@ export const incident = api<IncidentParams, IncidentResponse>(
   async ({ id, siteId }) => {
     const incident = await prisma.check.findUnique({
       where: { id: id },
+      // include: { site: true },
     });
     if (!incident) {
       throw APIError.notFound("Incident not found");
