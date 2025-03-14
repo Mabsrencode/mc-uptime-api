@@ -34,6 +34,8 @@ model Site {
   // mobile_number String?  @unique
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  incident Incident[]
+  notification Notification[]
 }
 
 model Check {
@@ -44,4 +46,27 @@ model Check {
   error     String?
   details   String?
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+}
+
+model Incident {
+  id        String   @id @default(uuid())
+  siteId    String
+  startTime DateTime @default(now())
+  endTime   DateTime?
+  resolved  Boolean  @default(false)
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  @@index([siteId, resolved])
+  notification Notification[]
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  siteId      String
+  incidentId  String
+  sentAt      DateTime @default(now())
+  type        String  
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, sentAt]) 
 }

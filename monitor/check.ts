@@ -74,15 +74,34 @@ async function doCheck(
 ): Promise<{ up: boolean; error?: string; details?: string }> {
   const { up, error, details } = await ping({ url: site.url });
   const wasUp = await getPreviousMeasurement(site.id);
+
   if (up !== wasUp) {
     await TransitionTopic.publish({ site, up });
-    const subject = up ? "Site is back up" : "Site is down";
-    const text = `Your site ${site.url} is ${up ? "up" : "down"}. ${
-      error ? `Reason: ${error}` : ""
-    } ${details ? `Details: ${details}` : ""}`;
-    await sendEmail(site.email, subject, text);
-  }
 
+    if (!up) {
+      const incident = await prisma.incident.create({
+        data: {
+          siteId: site.id,
+          startTime: new Date(),
+          resolved: false,
+        },
+      });
+      await sendEmailNotification(site, incident.id, "DOWN");
+    } else {
+      const latestIncident = await prisma.incident.findFirst({
+        where: { siteId: site.id, resolved: false },
+        orderBy: { startTime: "desc" },
+      });
+
+      if (latestIncident) {
+        await prisma.incident.update({
+          where: { id: latestIncident.id },
+          data: { resolved: true, endTime: new Date() },
+        });
+        await sendEmailNotification(site, latestIncident.id, "UP");
+      }
+    }
+  }
   await prisma.check.create({
     data: {
       siteId: site.id,
@@ -94,6 +113,37 @@ async function doCheck(
   });
 
   return { up, error, details };
+}
+
+async function sendEmailNotification(
+  site: Site,
+  incidentId: string,
+  type: "DOWN" | "UP"
+) {
+  const lastNotification = await prisma.notification.findFirst({
+    where: { siteId: site.id, type },
+    orderBy: { sentAt: "desc" },
+  });
+
+  const throttleDuration = 30 * 60 * 1000;
+  if (
+    !lastNotification ||
+    Date.now() - lastNotification.sentAt.getTime() > throttleDuration
+  ) {
+    const subject = type === "DOWN" ? "Site is down" : "Site is back up";
+    const text = `Your site ${site.url} is ${type === "DOWN" ? "down" : "up"}.`;
+
+    await sendEmail(site.email, subject, text);
+
+    await prisma.notification.create({
+      data: {
+        siteId: site.id,
+        incidentId,
+        type,
+        sentAt: new Date(),
+      },
+    });
+  }
 }
 
 async function getPreviousMeasurement(siteID: string): Promise<boolean> {
