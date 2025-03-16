@@ -84,6 +84,8 @@ async function doCheck(
           siteId: site.id,
           startTime: new Date(),
           resolved: false,
+          error: !up ? error : null,
+          details: !up ? details : null,
         },
       });
       await sendEmailNotification(site, incident.id, "DOWN");
@@ -107,8 +109,6 @@ async function doCheck(
       siteId: site.id,
       up,
       checkedAt: new Date(),
-      error: !up ? error : null,
-      details: !up ? details : null,
     },
   });
 

@@ -20,6 +20,7 @@ model User {
   password      String
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  sites         Site[]
 }
 
 
@@ -36,6 +37,7 @@ model Site {
   updatedAt     DateTime @updatedAt
   incident Incident[]
   notification Notification[]
+  user User @relation(fields: [userId], references: [id])
 }
 
 model Check {
@@ -43,8 +45,8 @@ model Check {
   siteId    String
   up        Boolean
   checkedAt DateTime @default(now())
-  error     String?
-  details   String?
+  // error     String?
+  // details   String?
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
 
@@ -54,6 +56,8 @@ model Incident {
   startTime DateTime @default(now())
   endTime   DateTime?
   resolved  Boolean  @default(false)
+  error     String?
+  details   String?
   site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
   @@index([siteId, resolved])
   notification Notification[]
