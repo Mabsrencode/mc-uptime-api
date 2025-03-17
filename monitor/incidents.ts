@@ -82,7 +82,7 @@ interface GetIncidentsByUserParams {
 }
 
 interface GetIncidentsByUserResponse {
-  incidents: Incident[];
+  data: Incident[];
 }
 
 export const getAllIncidentsByUser = api<
@@ -130,7 +130,7 @@ export const getAllIncidentsByUser = api<
         },
       }));
 
-      return { incidents: formattedIncidents };
+      return { data: formattedIncidents };
     } catch (err) {
       throw APIError.internal("Failed to fetch incidents", err as Error);
     }
