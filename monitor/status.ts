@@ -8,6 +8,8 @@ interface SiteStatus {
   up: boolean;
   checkedAt: string;
   incidentId: string;
+  error: string | null;
+  details: string | null;
 }
 
 interface StatusResponse {
@@ -25,6 +27,8 @@ export const status = api(
         up: true,
         checkedAt: true,
         id: true,
+        details: true,
+        error: true,
       },
     });
 
@@ -33,6 +37,8 @@ export const status = api(
       up: row.up,
       incidentId: row.id,
       checkedAt: row.checkedAt.toISOString(),
+      error: row.error,
+      details: row.details,
     }));
 
     return { sites: results };

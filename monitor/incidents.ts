@@ -15,15 +15,20 @@ interface IncidentLogsData {
   resolved: boolean;
   error?: string | null;
   details?: string | null;
+  url: string;
+  email: string;
+  monitorType: string;
+  interval: number;
+  up: boolean;
 }
 
 interface IncidentLogsResponse {
   data: IncidentLogsData[];
 }
-export const incidentLog = api<IncidentLogsParams, IncidentLogsResponse>(
+export const getIncident = api<IncidentLogsParams, IncidentLogsResponse>(
   {
     expose: true,
-    path: "/report-log/:siteId",
+    path: "/incident/:siteId",
     method: "GET",
     auth: false,
   },
@@ -32,8 +37,8 @@ export const incidentLog = api<IncidentLogsParams, IncidentLogsResponse>(
     const incidents = await prisma.incident.findMany({
       where: { siteId: siteId },
       include: { site: true },
+      orderBy: { startTime: "desc" },
     });
-    console.log(incidents);
     if (!incidents) {
       throw APIError.notFound("Incident not found");
     }
@@ -46,6 +51,11 @@ export const incidentLog = api<IncidentLogsParams, IncidentLogsResponse>(
       resolved: incident.resolved,
       error: incident.error,
       details: incident.details,
+      url: incident.site.url,
+      email: incident.site.email,
+      monitorType: incident.site.monitorType,
+      interval: incident.site.interval,
+      up: incident.up,
     }));
 
     return { data: data };
@@ -60,6 +70,7 @@ interface Incident {
   resolved: boolean;
   error?: string;
   details?: string;
+  up: boolean;
   site: {
     id: string;
     url: string;
@@ -74,7 +85,7 @@ interface GetIncidentsByUserResponse {
   incidents: Incident[];
 }
 
-export const getIncidentsByUser = api<
+export const getAllIncidentsByUser = api<
   GetIncidentsByUserParams,
   GetIncidentsByUserResponse
 >(
@@ -112,6 +123,7 @@ export const getIncidentsByUser = api<
         resolved: incident.resolved,
         error: incident.error || undefined,
         details: incident.details || undefined,
+        up: incident.up,
         site: {
           id: incident.site.id,
           url: incident.site.url,

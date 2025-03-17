@@ -4,14 +4,11 @@ import { Topic } from "encore.dev/pubsub";
 import { scheduleSiteCheck, stopSiteCheck } from "../monitor/check";
 
 const prisma = new PrismaClient();
-
 export interface Site {
   id: string;
   url: string;
   email: string;
   interval: number;
-  // mobile_number?: string | null;
-  monitorType: string;
 }
 
 export interface UserSites {
@@ -83,6 +80,24 @@ export const getAllSiteByUser = api(
   async ({ id }: { id: string }): Promise<UserSites> => {
     const site = await prisma.site.findMany({
       where: { userId: id },
+      include: {
+        checks: {
+          select: { up: true },
+          orderBy: { checkedAt: "desc" },
+          take: 1,
+        },
+        incident: {
+          select: {
+            id: true,
+            startTime: true,
+            endTime: true,
+            resolved: true,
+            error: true,
+            details: true,
+            up: true,
+          },
+        },
+      },
     });
     if (!site) throw new Error("site not found");
     return { data: site };
@@ -114,10 +129,20 @@ export const list = api(
 
 export const update = api(
   { expose: true, method: "PUT", path: "/site/:id" },
-  async ({ id, interval }: { id: string; interval: number }): Promise<Site> => {
+  async ({
+    id,
+    interval,
+    url,
+    monitorType,
+  }: {
+    id: string;
+    interval: number;
+    url: string;
+    monitorType: string;
+  }): Promise<Site> => {
     const site = await prisma.site.update({
       where: { id },
-      data: { interval },
+      data: { interval, url, monitorType },
     });
     stopSiteCheck(id);
     scheduleSiteCheck(site);

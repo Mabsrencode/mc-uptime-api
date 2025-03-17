@@ -86,6 +86,7 @@ async function doCheck(
           resolved: false,
           error: !up ? error : null,
           details: !up ? details : null,
+          up: up,
         },
       });
       await sendEmailNotification(site, incident.id, "DOWN");
@@ -98,7 +99,7 @@ async function doCheck(
       if (latestIncident) {
         await prisma.incident.update({
           where: { id: latestIncident.id },
-          data: { resolved: true, endTime: new Date() },
+          data: { resolved: true, endTime: new Date(), up: true },
         });
         await sendEmailNotification(site, latestIncident.id, "UP");
       }
@@ -109,6 +110,8 @@ async function doCheck(
       siteId: site.id,
       up,
       checkedAt: new Date(),
+      error: error,
+      details: details,
     },
   });
 

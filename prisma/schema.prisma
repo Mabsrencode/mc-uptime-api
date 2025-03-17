@@ -45,8 +45,8 @@ model Check {
   siteId    String
   up        Boolean
   checkedAt DateTime @default(now())
-  // error     String?
-  // details   String?
+  error     String?
+  details   String?
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
 
@@ -58,6 +58,7 @@ model Incident {
   resolved  Boolean  @default(false)
   error     String?
   details   String?
+  up        Boolean @default(false)
   site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
   @@index([siteId, resolved])
   notification Notification[]
