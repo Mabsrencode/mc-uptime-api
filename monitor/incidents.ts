@@ -4,7 +4,7 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 interface IncidentLogsParams {
-  siteId: string;
+  incidentId: string;
 }
 
 interface IncidentLogsData {
@@ -25,40 +25,63 @@ interface IncidentLogsData {
 interface IncidentLogsResponse {
   data: IncidentLogsData[];
 }
-export const getIncident = api<IncidentLogsParams, IncidentLogsResponse>(
+export const getIncident = api<
+  { incidentId: string },
+  { data: { incident: IncidentLogsData; relatedIncidents: IncidentLogsData[] } }
+>(
   {
     expose: true,
-    path: "/incident/:siteId",
+    path: "/incident/:incidentId",
     method: "GET",
-    auth: false,
+    auth: true,
   },
 
-  async ({ siteId }) => {
-    const incidents = await prisma.incident.findMany({
-      where: { siteId: siteId },
+  async ({ incidentId }) => {
+    const incident = await prisma.incident.findUnique({
+      where: { id: incidentId },
+      include: { site: true },
+    });
+
+    if (!incident) {
+      throw APIError.notFound("Incident not found");
+    }
+    const relatedIncidents = await prisma.incident.findMany({
+      where: { siteId: incident.siteId, NOT: { id: incidentId } },
       include: { site: true },
       orderBy: { startTime: "desc" },
     });
-    if (!incidents) {
-      throw APIError.notFound("Incident not found");
-    }
+    const formattedData = {
+      incident: {
+        id: incident.id,
+        siteId: incident.siteId,
+        startTime: incident.startTime.toISOString(),
+        endTime: incident.endTime ? incident.endTime.toISOString() : null,
+        resolved: incident.resolved,
+        error: incident.error,
+        details: incident.details,
+        url: incident.site.url,
+        email: incident.site.email,
+        monitorType: incident.site.monitorType,
+        interval: incident.site.interval,
+        up: incident.up,
+      },
+      relatedIncidents: relatedIncidents.map((inc) => ({
+        id: inc.id,
+        siteId: inc.siteId,
+        startTime: inc.startTime.toISOString(),
+        endTime: inc.endTime ? inc.endTime.toISOString() : null,
+        resolved: inc.resolved,
+        error: inc.error,
+        details: inc.details,
+        url: inc.site.url,
+        email: inc.site.email,
+        monitorType: inc.site.monitorType,
+        interval: inc.site.interval,
+        up: inc.up,
+      })),
+    };
 
-    const data = incidents.map((incident) => ({
-      id: incident.id,
-      siteId: incident.siteId,
-      startTime: incident.startTime.toISOString(),
-      endTime: incident.endTime ? incident.endTime.toISOString() : null,
-      resolved: incident.resolved,
-      error: incident.error,
-      details: incident.details,
-      url: incident.site.url,
-      email: incident.site.email,
-      monitorType: incident.site.monitorType,
-      interval: incident.site.interval,
-      up: incident.up,
-    }));
-
-    return { data: data };
+    return { data: formattedData };
   }
 );
 
@@ -68,13 +91,13 @@ interface Incident {
   startTime: string;
   endTime: string | null;
   resolved: boolean;
-  error?: string;
-  details?: string;
+  error?: string | null;
+  details?: string | null;
+  url: string;
+  email: string;
+  monitorType: string;
+  interval: number;
   up: boolean;
-  site: {
-    id: string;
-    url: string;
-  };
 }
 
 interface GetIncidentsByUserParams {
@@ -103,14 +126,16 @@ export const getAllIncidentsByUser = api<
             select: {
               id: true,
               url: true,
+              email: true,
+              monitorType: true,
+              interval: true,
             },
           },
         },
         orderBy: {
-          startTime: "desc",
+          endTime: "desc",
         },
       });
-
       if (!incidents || incidents.length === 0) {
         throw APIError.notFound("No incidents found for this user");
       }
@@ -121,13 +146,13 @@ export const getAllIncidentsByUser = api<
         startTime: incident.startTime.toISOString(),
         endTime: incident.endTime ? incident.endTime.toISOString() : null,
         resolved: incident.resolved,
-        error: incident.error || undefined,
-        details: incident.details || undefined,
+        error: incident.error,
+        details: incident.details,
+        url: incident.site.url,
+        email: incident.site.email,
+        monitorType: incident.site.monitorType,
+        interval: incident.site.interval,
         up: incident.up,
-        site: {
-          id: incident.site.id,
-          url: incident.site.url,
-        },
       }));
 
       return { data: formattedIncidents };
