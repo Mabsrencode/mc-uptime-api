@@ -77,9 +77,18 @@ export const get = api(
 
 export const getAllSiteByUser = api(
   { expose: true, method: "GET", path: "/user-sites/:id", auth: true },
-  async ({ id }: { id: string }): Promise<UserSites> => {
-    const site = await prisma.site.findMany({
-      where: { userId: id },
+  async ({
+    id,
+    search,
+  }: {
+    id: string;
+    search?: string | null;
+  }): Promise<UserSites> => {
+    const sites = await prisma.site.findMany({
+      where: {
+        userId: id,
+        ...(search ? { url: { contains: search, mode: "insensitive" } } : {}),
+      },
       include: {
         checks: {
           select: { up: true },
@@ -99,8 +108,8 @@ export const getAllSiteByUser = api(
         },
       },
     });
-    if (!site) throw new Error("site not found");
-    return { data: site };
+
+    return { data: sites };
   }
 );
 
