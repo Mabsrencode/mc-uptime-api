@@ -124,6 +124,28 @@ export const del = api(
   }
 );
 
+export const bulkDelete = api(
+  {
+    expose: true,
+    method: "DELETE",
+    path: "/site/bulk-delete",
+  },
+  async ({ ids }: { ids: string | string[] }): Promise<void> => {
+    if (!ids) {
+      throw APIError.invalidArgument("ids must be provided");
+    }
+
+    const idsArray = Array.isArray(ids) ? ids : ids.split(",");
+
+    for (const id of idsArray) {
+      stopSiteCheck(id);
+      await prisma.site.delete({
+        where: { id },
+      });
+    }
+  }
+);
+
 export interface ListResponse {
   sites: Site[];
 }
