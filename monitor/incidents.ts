@@ -85,6 +85,13 @@ export const getIncident = api<
   }
 );
 
+interface GetIncidentsByUserParams {
+  userId: string;
+}
+interface NotificationsData {
+  sentAt: string;
+  type: string;
+}
 interface Incident {
   id: string;
   siteId: string;
@@ -98,10 +105,7 @@ interface Incident {
   monitorType: string;
   interval: number;
   up: boolean;
-}
-
-interface GetIncidentsByUserParams {
-  userId: string;
+  notifications: NotificationsData[] | null;
 }
 
 interface GetIncidentsByUserResponse {
@@ -131,13 +135,19 @@ export const getAllIncidentsByUser = api<
               interval: true,
             },
           },
+          notification: {
+            select: {
+              sentAt: true,
+              type: true,
+            },
+          },
         },
         orderBy: {
           endTime: "desc",
         },
       });
       if (!incidents || incidents.length === 0) {
-        throw APIError.notFound("No incidents found for this user");
+        return { data: [] };
       }
 
       const formattedIncidents: Incident[] = incidents.map((incident) => ({
@@ -153,6 +163,10 @@ export const getAllIncidentsByUser = api<
         monitorType: incident.site.monitorType,
         interval: incident.site.interval,
         up: incident.up,
+        notifications: incident.notification.map((notification) => ({
+          sentAt: notification.sentAt.toISOString(),
+          type: notification.type,
+        })),
       }));
 
       return { data: formattedIncidents };
