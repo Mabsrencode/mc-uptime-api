@@ -81,16 +81,41 @@ export const getAllSiteByUser = api(
     id,
     search,
     type,
+    status,
   }: {
     id: string;
     search?: string | null;
     type?: string | null;
+    status?: "up" | "down" | null;
   }): Promise<UserSites> => {
+    const latestChecks = await prisma.check.groupBy({
+      by: ["siteId"],
+      _max: {
+        checkedAt: true,
+      },
+    });
+
+    const siteIdsWithLatestChecks = latestChecks.map((check) => check.siteId);
     const sites = await prisma.site.findMany({
       where: {
         userId: id,
         ...(search ? { url: { contains: search, mode: "insensitive" } } : {}),
         ...(type ? { monitorType: type } : {}),
+        ...(status
+          ? {
+              checks: {
+                some: {
+                  siteId: { in: siteIdsWithLatestChecks },
+                  up: status === "up" ? true : false,
+                  checkedAt: {
+                    in: latestChecks
+                      .map((check) => check._max.checkedAt)
+                      .filter((date): date is Date => date !== null),
+                  },
+                },
+              },
+            }
+          : {}),
       },
       include: {
         checks: {
