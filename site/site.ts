@@ -80,14 +80,17 @@ export const getAllSiteByUser = api(
   async ({
     id,
     search,
+    type,
   }: {
     id: string;
     search?: string | null;
+    type?: string | null;
   }): Promise<UserSites> => {
     const sites = await prisma.site.findMany({
       where: {
         userId: id,
         ...(search ? { url: { contains: search, mode: "insensitive" } } : {}),
+        ...(type ? { monitorType: type } : {}),
       },
       include: {
         checks: {
@@ -112,7 +115,6 @@ export const getAllSiteByUser = api(
     return { data: sites };
   }
 );
-
 export const del = api(
   { expose: true, method: "DELETE", path: "/site/:id" },
   async ({ id }: { id: string }): Promise<void> => {
