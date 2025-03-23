@@ -4,11 +4,14 @@ import { Topic } from "encore.dev/pubsub";
 import { scheduleSiteCheck, stopSiteCheck } from "../monitor/check";
 
 const prisma = new PrismaClient();
+
 export interface Site {
   id: string;
   url: string;
   email: string;
   interval: number;
+  monitorType: string;
+  userId: string;
 }
 
 export interface UserSites {
@@ -21,6 +24,11 @@ export const SiteAddedTopic = new Topic<Site>("site.added", {
 
 export interface AddParams {
   url: string;
+  userID: string;
+  email: string;
+  interval: number;
+  monitorType: string;
+  mobile_number?: string;
 }
 
 export const add = api(
@@ -31,21 +39,21 @@ export const add = api(
     email,
     interval,
     monitorType,
-  }: AddParams & {
-    userID: string;
-    email: string;
-    interval: number;
-    monitorType: string;
-    mobile_number?: string;
-  }): Promise<Site> => {
+  }: AddParams): Promise<Site> => {
+    if (!url || !email || !interval || !monitorType) {
+      throw APIError.invalidArgument("All fields are required");
+    }
+    if (!userID) throw APIError.unauthenticated("User not authenticated");
+
+    if (interval < 1) {
+      throw APIError.invalidArgument("Interval must be at least 1 minute");
+    }
     const existingWebsite = await prisma.site.findFirst({
-      where: { url: url },
+      where: { url },
     });
     if (existingWebsite) {
       throw APIError.alreadyExists("URL already exists");
     }
-    if (!userID) throw APIError.unauthenticated("User not authenticated");
-
     const site = await prisma.site.create({
       data: {
         url,
@@ -70,7 +78,9 @@ export const get = api(
       where: { id },
     });
 
-    if (!site) throw new Error("site not found");
+    if (!site) {
+      throw APIError.notFound("Site not found");
+    }
     return site;
   }
 );
@@ -140,14 +150,17 @@ export const getAllSiteByUser = api(
     return { data: sites };
   }
 );
+
 export const del = api(
   { expose: true, method: "DELETE", path: "/site/:id" },
   async ({ id }: { id: string }): Promise<void> => {
-    stopSiteCheck(id);
+    const site = await prisma.site.findUnique({ where: { id } });
+    if (!site) {
+      throw APIError.notFound("Site not found");
+    }
 
-    await prisma.site.delete({
-      where: { id },
-    });
+    stopSiteCheck(id);
+    await prisma.site.delete({ where: { id } });
   }
 );
 
@@ -164,11 +177,16 @@ export const bulkDelete = api(
 
     const idsArray = Array.isArray(ids) ? ids : ids.split(",");
 
+    const sites = await prisma.site.findMany({
+      where: { id: { in: idsArray } },
+    });
+    if (sites.length !== idsArray.length) {
+      throw APIError.notFound("One or more sites not found");
+    }
+
     for (const id of idsArray) {
       stopSiteCheck(id);
-      await prisma.site.delete({
-        where: { id },
-      });
+      await prisma.site.delete({ where: { id } });
     }
   }
 );
@@ -198,13 +216,19 @@ export const update = api(
     url: string;
     monitorType: string;
   }): Promise<Site> => {
-    const site = await prisma.site.update({
+    const site = await prisma.site.findUnique({ where: { id } });
+    if (!site) {
+      throw APIError.notFound("Site not found");
+    }
+
+    const updatedSite = await prisma.site.update({
       where: { id },
       data: { interval, url, monitorType },
     });
-    stopSiteCheck(id);
-    scheduleSiteCheck(site);
 
-    return site;
+    stopSiteCheck(id);
+    scheduleSiteCheck(updatedSite);
+
+    return updatedSite;
   }
 );

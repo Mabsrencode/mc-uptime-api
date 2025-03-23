@@ -48,6 +48,9 @@ model Check {
   checkedAt DateTime @default(now())
   error     String?
   details   String?
+  average_response Int?
+  max_response Int?
+  min_response Int?
   site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
 

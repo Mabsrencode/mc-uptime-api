@@ -85,8 +85,10 @@ export const ping = api<PingParams, PingResponse>(
       }
       return {
         up: false,
-        error: "Fetch failed",
-        details: errorDetails,
+        error: `HTTP Status: ${resp.status} ${resp.statusText}`,
+        details: `Response headers: ${JSON.stringify(
+          Object.fromEntries(resp.headers.entries())
+        )}`,
         averageResponseTimeMs: undefined,
         minResponseTimeMs: undefined,
         maxResponseTimeMs: undefined,

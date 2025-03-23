@@ -71,25 +71,65 @@ function getCronExpression(interval: number): string {
 
 async function doCheck(
   site: Site
-): Promise<{ up: boolean; error?: string; details?: string }> {
-  const { up, error, details } = await ping({ url: site.url });
+): Promise<{
+  up: boolean;
+  error?: string;
+  details?: string;
+  average_response?: number;
+  max_response?: number;
+  min_response?: number;
+}> {
+  let up = false;
+  let error: string | undefined;
+  let details: string | undefined;
+  let average_response: number | undefined;
+  let max_response: number | undefined;
+  let min_response: number | undefined;
+  try {
+    const pingResponse = await ping({ url: site.url });
+    up = pingResponse.up;
+    error = pingResponse.error;
+    details = pingResponse.details;
+    average_response = pingResponse.averageResponseTimeMs;
+    max_response = pingResponse.maxResponseTimeMs;
+    min_response = pingResponse.minResponseTimeMs;
+  } catch (err) {
+    up = false;
+    error = err instanceof Error ? err.message : String(err);
+    details = err instanceof Error ? err.message : String(err);
+  }
+
+  const existingSite = await prisma.site.findUnique({
+    where: { id: site.id },
+  });
+  if (!existingSite) {
+    console.error(`Site not found: ${site.id}`);
+    logger.error(`Site not found: ${site.id}`);
+    return { up: false, error: "Site not found", details: "Site not found" };
+  }
+
   const wasUp = await getPreviousMeasurement(site.id);
 
   if (up !== wasUp) {
     await TransitionTopic.publish({ site, up });
 
     if (!up) {
-      const incident = await prisma.incident.create({
-        data: {
-          siteId: site.id,
-          startTime: new Date(),
-          resolved: false,
-          error: !up ? error : null,
-          details: !up ? details : null,
-          up: up,
-        },
-      });
-      await sendEmailNotification(site, incident.id, "DOWN");
+      try {
+        const incident = await prisma.incident.create({
+          data: {
+            siteId: site.id,
+            startTime: new Date(),
+            resolved: false,
+            error: error,
+            details: details,
+            up: up,
+          },
+        });
+        await sendEmailNotification(site, incident.id, "DOWN", error, details);
+      } catch (err) {
+        console.error(`Failed to create incident for site ${site.url}:`, err);
+        logger.error(`Failed to create incident for site ${site.url}:`, err);
+      }
     } else {
       const latestIncident = await prisma.incident.findFirst({
         where: { siteId: site.id, resolved: false },
@@ -105,23 +145,34 @@ async function doCheck(
       }
     }
   }
-  await prisma.check.create({
-    data: {
-      siteId: site.id,
-      up,
-      checkedAt: new Date(),
-      error: error,
-      details: details,
-    },
-  });
 
-  return { up, error, details };
+  try {
+    await prisma.check.create({
+      data: {
+        siteId: site.id,
+        up,
+        checkedAt: new Date(),
+        error: error,
+        details: details,
+        average_response: average_response,
+        max_response: max_response,
+        min_response: min_response,
+      },
+    });
+  } catch (err) {
+    console.error(`Failed to create check for site ${site.url}:`, err);
+    logger.error(`Failed to create check for site ${site.url}:`, err);
+  }
+
+  return { up, error, details, average_response, max_response, min_response };
 }
 
 async function sendEmailNotification(
   site: Site,
   incidentId: string,
-  type: "DOWN" | "UP"
+  type: "DOWN" | "UP",
+  error?: string,
+  details?: string
 ) {
   const lastNotification = await prisma.notification.findFirst({
     where: { siteId: site.id, type },
@@ -134,7 +185,9 @@ async function sendEmailNotification(
     Date.now() - lastNotification.sentAt.getTime() > throttleDuration
   ) {
     const subject = type === "DOWN" ? "Site is down" : "Site is back up";
-    const text = `Your site ${site.url} is ${type === "DOWN" ? "down" : "up"}.`;
+    const text = `Your site ${site.url} is ${type === "DOWN" ? "down" : "up"} ${
+      error ? `Root Cause: ${error}` : ""
+    } ${details ? `${details}` : ""}.`;
 
     await sendEmail(site.email, subject, text);
 
