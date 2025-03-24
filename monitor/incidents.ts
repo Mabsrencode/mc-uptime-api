@@ -90,6 +90,7 @@ interface GetIncidentsByUserParams {
   search?: string | null;
   type?: string | null;
   status?: "up" | "down" | null;
+  paginate: number;
 }
 interface NotificationsData {
   sentAt: string;
@@ -125,11 +126,13 @@ export const getAllIncidentsByUser = api<
     search,
     type,
     status,
+    paginate = 5,
   }: {
     userId: string;
     search?: string | null;
     type?: string | null;
     status?: "up" | "down" | null;
+    paginate: number;
   }) => {
     const latestChecks = await prisma.check.groupBy({
       by: ["siteId"],
@@ -140,6 +143,7 @@ export const getAllIncidentsByUser = api<
 
     const siteIdsWithLatestChecks = latestChecks.map((check) => check.siteId);
     const incidents = await prisma.incident.findMany({
+      take: paginate,
       where: {
         site: {
           userId: userId,
