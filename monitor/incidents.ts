@@ -87,6 +87,9 @@ export const getIncident = api<
 
 interface GetIncidentsByUserParams {
   userId: string;
+  search?: string | null;
+  type?: string | null;
+  status?: "up" | "down" | null;
 }
 interface NotificationsData {
   sentAt: string;
@@ -116,62 +119,93 @@ export const getAllIncidentsByUser = api<
   GetIncidentsByUserParams,
   GetIncidentsByUserResponse
 >(
-  { expose: true, method: "GET", path: "/incidents/:userId", auth: true },
-  async ({ userId }) => {
-    try {
-      const incidents = await prisma.incident.findMany({
-        where: {
-          site: {
-            userId: userId,
-          },
-        },
-        include: {
-          site: {
-            select: {
-              id: true,
-              url: true,
-              email: true,
-              monitorType: true,
-              interval: true,
-            },
-          },
-          notification: {
-            select: {
-              sentAt: true,
-              type: true,
-            },
-          },
-        },
-        orderBy: {
-          endTime: "desc",
-        },
-      });
-      if (!incidents || incidents.length === 0) {
-        return { data: [] };
-      }
+  { expose: true, method: "GET", path: "/incidents/:userId", auth: false },
+  async ({
+    userId,
+    search,
+    type,
+    status,
+  }: {
+    userId: string;
+    search?: string | null;
+    type?: string | null;
+    status?: "up" | "down" | null;
+  }) => {
+    const latestChecks = await prisma.check.groupBy({
+      by: ["siteId"],
+      _max: {
+        checkedAt: true,
+      },
+    });
 
-      const formattedIncidents: Incident[] = incidents.map((incident) => ({
-        id: incident.id,
-        siteId: incident.siteId,
-        startTime: incident.startTime.toISOString(),
-        endTime: incident.endTime ? incident.endTime.toISOString() : null,
-        resolved: incident.resolved,
-        error: incident.error,
-        details: incident.details,
-        url: incident.site.url,
-        email: incident.site.email,
-        monitorType: incident.site.monitorType,
-        interval: incident.site.interval,
-        up: incident.up,
-        notifications: incident.notification.map((notification) => ({
-          sentAt: notification.sentAt.toISOString(),
-          type: notification.type,
-        })),
-      }));
-
-      return { data: formattedIncidents };
-    } catch (err) {
-      throw APIError.internal("Failed to fetch incidents", err as Error);
+    const siteIdsWithLatestChecks = latestChecks.map((check) => check.siteId);
+    const incidents = await prisma.incident.findMany({
+      where: {
+        site: {
+          userId: userId,
+          ...(search ? { url: { contains: search, mode: "insensitive" } } : {}),
+          ...(type ? { monitorType: type } : {}),
+          ...(status
+            ? {
+                checks: {
+                  some: {
+                    siteId: { in: siteIdsWithLatestChecks },
+                    up: status === "up" ? true : false,
+                    checkedAt: {
+                      in: latestChecks
+                        .map((check) => check._max.checkedAt)
+                        .filter((date): date is Date => date !== null),
+                    },
+                  },
+                },
+              }
+            : {}),
+        },
+      },
+      include: {
+        site: {
+          select: {
+            id: true,
+            url: true,
+            email: true,
+            monitorType: true,
+            interval: true,
+          },
+        },
+        notification: {
+          select: {
+            sentAt: true,
+            type: true,
+          },
+        },
+      },
+      orderBy: {
+        endTime: "desc",
+      },
+    });
+    if (!incidents || incidents.length === 0) {
+      return { data: [] };
     }
+
+    const formattedIncidents: Incident[] = incidents.map((incident) => ({
+      id: incident.id,
+      siteId: incident.siteId,
+      startTime: incident.startTime.toISOString(),
+      endTime: incident.endTime ? incident.endTime.toISOString() : null,
+      resolved: incident.resolved,
+      error: incident.error,
+      details: incident.details,
+      url: incident.site.url,
+      email: incident.site.email,
+      monitorType: incident.site.monitorType,
+      interval: incident.site.interval,
+      up: incident.up,
+      notifications: incident.notification.map((notification) => ({
+        sentAt: notification.sentAt.toISOString(),
+        type: notification.type,
+      })),
+    }));
+
+    return { data: formattedIncidents };
   }
 );
