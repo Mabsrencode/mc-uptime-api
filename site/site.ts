@@ -16,6 +16,7 @@ export interface Site {
 
 export interface UserSites {
   data: Site[];
+  total: number;
 }
 
 export const SiteAddedTopic = new Topic<Site>("site.added", {
@@ -92,11 +93,15 @@ export const getAllSiteByUser = api(
     search,
     type,
     status,
+    page = 1,
+    perPage = 5,
   }: {
     id: string;
     search?: string | null;
     type?: string | null;
     status?: "up" | "down" | null;
+    page?: number;
+    perPage?: number;
   }): Promise<UserSites> => {
     const latestChecks = await prisma.check.groupBy({
       by: ["siteId"],
@@ -106,6 +111,28 @@ export const getAllSiteByUser = api(
     });
 
     const siteIdsWithLatestChecks = latestChecks.map((check) => check.siteId);
+    const total = await prisma.site.count({
+      where: {
+        userId: id,
+        ...(search ? { url: { contains: search, mode: "insensitive" } } : {}),
+        ...(type ? { monitorType: type } : {}),
+        ...(status
+          ? {
+              checks: {
+                some: {
+                  siteId: { in: siteIdsWithLatestChecks },
+                  up: status === "up" ? true : false,
+                  checkedAt: {
+                    in: latestChecks
+                      .map((check) => check._max.checkedAt)
+                      .filter((date): date is Date => date !== null),
+                  },
+                },
+              },
+            }
+          : {}),
+      },
+    });
     const sites = await prisma.site.findMany({
       where: {
         userId: id,
@@ -145,9 +172,11 @@ export const getAllSiteByUser = api(
           },
         },
       },
+      skip: (page - 1) * perPage,
+      take: perPage,
     });
 
-    return { data: sites };
+    return { data: sites, total };
   }
 );
 
