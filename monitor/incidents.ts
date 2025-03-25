@@ -90,7 +90,8 @@ interface GetIncidentsByUserParams {
   search?: string | null;
   type?: string | null;
   status?: "up" | "down" | null;
-  paginate: number;
+  page?: number;
+  perPage?: number;
 }
 interface NotificationsData {
   sentAt: string;
@@ -114,6 +115,7 @@ interface Incident {
 
 interface GetIncidentsByUserResponse {
   data: Incident[];
+  total: number;
 }
 
 export const getAllIncidentsByUser = api<
@@ -126,14 +128,9 @@ export const getAllIncidentsByUser = api<
     search,
     type,
     status,
-    paginate = 5,
-  }: {
-    userId: string;
-    search?: string | null;
-    type?: string | null;
-    status?: "up" | "down" | null;
-    paginate: number;
-  }) => {
+    page = 1,
+    perPage = 5,
+  }: GetIncidentsByUserParams) => {
     const latestChecks = await prisma.check.groupBy({
       by: ["siteId"],
       _max: {
@@ -142,6 +139,32 @@ export const getAllIncidentsByUser = api<
     });
 
     const siteIdsWithLatestChecks = latestChecks.map((check) => check.siteId);
+
+    const totalCount = await prisma.incident.count({
+      where: {
+        site: {
+          userId: userId,
+          ...(search ? { url: { contains: search, mode: "insensitive" } } : {}),
+          ...(type ? { monitorType: type } : {}),
+          ...(status
+            ? {
+                checks: {
+                  some: {
+                    siteId: { in: siteIdsWithLatestChecks },
+                    up: status === "up" ? true : false,
+                    checkedAt: {
+                      in: latestChecks
+                        .map((check) => check._max.checkedAt)
+                        .filter((date): date is Date => date !== null),
+                    },
+                  },
+                },
+              }
+            : {}),
+        },
+      },
+    });
+
     const incidents = await prisma.incident.findMany({
       take: paginate,
       where: {
@@ -186,9 +209,12 @@ export const getAllIncidentsByUser = api<
       orderBy: {
         endTime: "desc",
       },
+      skip: (page - 1) * perPage,
+      take: perPage,
     });
+
     if (!incidents || incidents.length === 0) {
-      return { data: [] };
+      return { data: [], total: 0 };
     }
 
     const formattedIncidents: Incident[] = incidents.map((incident) => ({
@@ -210,6 +236,6 @@ export const getAllIncidentsByUser = api<
       })),
     }));
 
-    return { data: formattedIncidents };
+    return { data: formattedIncidents, total: totalCount };
   }
 );
