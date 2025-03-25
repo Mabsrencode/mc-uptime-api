@@ -71,18 +71,104 @@ export const add = api(
     return site;
   }
 );
-
+export interface IncidentsI {
+  id: string;
+  startTime: string;
+  endTime?: string | null;
+  resolved: boolean;
+  error?: string | null;
+  details?: string | null;
+  up: boolean;
+}
+export interface NotificationI {
+  type: string;
+  sentAt: string;
+}
+export interface ChecksI {
+  id: string;
+  up: boolean;
+  checkedAt: string;
+  error?: string | null;
+  details?: string | null;
+  average_response?: number | null;
+  max_response?: number | null;
+  min_response?: number | null;
+}
+export interface SiteStatus {
+  id: string;
+  url: string;
+  email: string;
+  interval: number;
+  monitorType: string;
+  userId: string;
+  checks: ChecksI[] | null;
+  incident: IncidentsI[] | null;
+  notification: NotificationI[] | null;
+}
 export const get = api(
-  { expose: true, method: "GET", path: "/site/:id", auth: false },
-  async ({ id }: { id: string }): Promise<Site> => {
+  { expose: true, method: "GET", path: "/status-monitor/:id", auth: false },
+  async ({ id }: { id: string }): Promise<SiteStatus> => {
     const site = await prisma.site.findUnique({
       where: { id },
+      include: {
+        incident: {
+          select: {
+            id: true,
+            startTime: true,
+            endTime: true,
+            resolved: true,
+            error: true,
+            details: true,
+            up: true,
+          },
+        },
+        notification: {
+          select: {
+            type: true,
+            sentAt: true,
+          },
+        },
+        checks: {
+          select: {
+            id: true,
+            up: true,
+            checkedAt: true,
+            error: true,
+            details: true,
+            average_response: true,
+            max_response: true,
+            min_response: true,
+          },
+        },
+      },
     });
-
     if (!site) {
       throw APIError.notFound("Site not found");
     }
-    return site;
+    return {
+      id: site.id,
+      url: site.url,
+      email: site.email,
+      interval: site.interval,
+      monitorType: site.monitorType,
+      userId: site.userId,
+      checks:
+        site.checks?.map((check) => ({
+          ...check,
+          checkedAt: check.checkedAt.toISOString(),
+        })) || null,
+      incident:
+        site.incident?.map((incident) => ({
+          ...incident,
+          startTime: incident.startTime.toISOString(),
+          endTime: incident.endTime?.toISOString() || null,
+        })) || null,
+      notification:
+        site.notification?.map((notification) => ({
+          ...notification,
+          sentAt: notification.sentAt.toISOString(),
+        })) || null,
+    };
   }
 );
 
