@@ -166,7 +166,6 @@ export const getAllIncidentsByUser = api<
     });
 
     const incidents = await prisma.incident.findMany({
-      take: paginate,
       where: {
         site: {
           userId: userId,
