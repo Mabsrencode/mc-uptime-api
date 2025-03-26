@@ -69,9 +69,7 @@ function getCronExpression(interval: number): string {
   return `*/${interval} * * * *`;
 }
 
-async function doCheck(
-  site: Site
-): Promise<{
+async function doCheck(site: Site): Promise<{
   up: boolean;
   error?: string;
   details?: string;
@@ -201,6 +199,33 @@ async function sendEmailNotification(
     });
   }
 }
+interface TestEmail {
+  url: string;
+  email: string;
+  type: "DOWN" | "UP";
+  error?: string;
+  details?: string;
+}
+interface TestEmailResponse {
+  message: string;
+}
+export const testNotification = api(
+  { method: "POST", path: "/test-notification" },
+  async (test: TestEmail): Promise<TestEmailResponse> => {
+    const subject = test.type === "DOWN" ? "Site is down" : "Site is back up";
+    const text = `Your site ${test.url} is ${
+      test.type === "DOWN" ? "down" : "up"
+    } ${test.error ? `Root Cause: ${test.error}` : "Test Only."} ${
+      test.details ? `${test.details}` : "Test Only"
+    }.`;
+    try {
+      await sendEmail(test.email, subject, text);
+      return { message: "Test Notification Sent Successfully" };
+    } catch (error) {
+      return { message: `Failed to send test notification: ${error}` };
+    }
+  }
+);
 
 async function getPreviousMeasurement(siteID: string): Promise<boolean> {
   const lastCheck = await prisma.check.findFirst({
