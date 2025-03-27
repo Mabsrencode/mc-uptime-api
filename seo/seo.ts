@@ -18,6 +18,12 @@ interface AnalyzeSEOResponse {
     length: number;
     optimal: boolean;
   };
+  serpPreview?: {
+    title: string;
+    url: string;
+    description: string;
+    favicon?: string;
+  };
   description: {
     text: string;
     length: number;
@@ -332,6 +338,11 @@ export const analyzeSeo = api<AnalyzeSEORequest, AnalyzeSEOResponse>(
       const finalUrl = response.request.res.responseUrl || processedUrl;
       const html = response.data;
       const $ = cheerio.load(html);
+      const favicon =
+        $('link[rel="icon"], link[rel="shortcut icon"]').attr("href") ||
+        $('meta[itemprop="image"]').attr("content") ||
+        new URL("/favicon.ico", finalUrl).href;
+
       const contentType = response.headers["content-type"] || "";
       const pageSize =
         parseInt(response.headers["content-length"]) || Buffer.byteLength(html);
@@ -393,6 +404,7 @@ export const analyzeSeo = api<AnalyzeSEORequest, AnalyzeSEOResponse>(
       const brokenLinksResults = await Promise.all(
         linksToCheck.map((link) => checkLink(link, finalUrl))
       );
+
       const brokenLinks = brokenLinksResults.filter((res) => res.broken).length;
       const bodyText = $("body").text();
       const keywordAnalysis = calculateKeywordDensity(bodyText, keywords);
@@ -407,6 +419,18 @@ export const analyzeSeo = api<AnalyzeSEORequest, AnalyzeSEOResponse>(
           'script[src], link[rel="stylesheet"][href], img[src], iframe[src]'
         ),
       ].length;
+      const serpPreview = {
+        title: titleText || "Untitled Page",
+        url: finalUrl,
+        description:
+          descriptionText ||
+          (bodyText.length > 0
+            ? bodyText.substring(0, 160).replace(/\s+/g, " ").trim() + "..."
+            : "No description available"),
+        favicon: favicon.startsWith("http")
+          ? favicon
+          : new URL(favicon, finalUrl).href,
+      };
       const {
         score,
         warnings: scoreWarnings,
@@ -436,6 +460,7 @@ export const analyzeSeo = api<AnalyzeSEORequest, AnalyzeSEOResponse>(
       suggestions.push(...scoreSuggestions);
 
       return {
+        serpPreview,
         url: processedUrl,
         finalUrl: finalUrl !== processedUrl ? finalUrl : undefined,
         title: {
@@ -486,6 +511,11 @@ export const analyzeSeo = api<AnalyzeSEORequest, AnalyzeSEOResponse>(
       };
     } catch (error: any) {
       return {
+        serpPreview: {
+          title: "Error loading page",
+          url: processedUrl,
+          description: "Could not generate preview due to error loading page",
+        },
         url: processedUrl,
         title: { text: "", length: 0, optimal: false },
         description: { text: "", length: 0, optimal: false },
@@ -503,7 +533,7 @@ export const analyzeSeo = api<AnalyzeSEORequest, AnalyzeSEOResponse>(
         seoScore: 0,
         warnings: ["Failed to fetch URL"],
         suggestions: [],
-        error: error.message,
+        message: error.message,
       };
     }
   }
