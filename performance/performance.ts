@@ -125,11 +125,12 @@ export const analyzePerformance = api<
   AnalyzePerformanceResponse
 >(
   {
-    method: "GET",
-    path: "/analyze-performance/:url",
+    method: "POST",
+    path: "/analyze-performance",
     expose: true,
   },
-  async ({ url }) => {
+  async (params) => {
+    const { url } = params;
     return await getPerformanceMetrics(url);
   }
 );
