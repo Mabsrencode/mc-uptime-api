@@ -2,12 +2,36 @@ import { api } from "encore.dev/api";
 import axios from "axios";
 import * as cheerio from "cheerio";
 import { performance } from "perf_hooks";
+import { JSDOM, VirtualConsole } from "jsdom";
+import { URL } from "url";
 
 interface AnalyzeSEORequest {
   url: string;
   keywords?: string[];
   followRedirects?: boolean;
   depth?: number;
+  renderMobile?: boolean;
+}
+
+interface OpenGraphData {
+  title?: string;
+  type?: string;
+  image?: string;
+  url?: string;
+  description?: string;
+  site_name?: string;
+  locale?: string;
+  audio?: string;
+  video?: string;
+  additionalProperties?: Record<string, string>;
+}
+
+interface MobileRendering {
+  viewportWidth: number;
+  simulatedDevice: string;
+  contentWidth: number;
+  issues: string[];
+  screenshot?: string;
 }
 
 interface AnalyzeSEOResponse {
@@ -54,6 +78,7 @@ interface AnalyzeSEOResponse {
     friendly: boolean;
     viewport: boolean;
     tapTargets: boolean;
+    rendering?: MobileRendering;
   };
   performance: {
     loadTime: number;
@@ -65,6 +90,16 @@ interface AnalyzeSEOResponse {
     lang: string | null;
     schemaMarkup: boolean;
   };
+  social: {
+    openGraph?: OpenGraphData;
+    twitterCard?: {
+      card?: string;
+      title?: string;
+      description?: string;
+      image?: string;
+    };
+  };
+  htmlContent?: string;
   seoScore: number;
   warnings: string[];
   suggestions: string[];
@@ -182,6 +217,136 @@ function analyzeMobileFriendliness(
   };
 }
 
+async function simulateMobileRendering(
+  html: string,
+  url: string
+): Promise<MobileRendering> {
+  const dom = new JSDOM(html, {
+    url,
+    pretendToBeVisual: true,
+    resources: "usable",
+    runScripts: "dangerously",
+    virtualConsole: new VirtualConsole(),
+  });
+
+  const window = dom.window;
+  const document = window.document;
+
+  Object.defineProperty(window, "innerWidth", {
+    value: 390,
+    configurable: true,
+  });
+  Object.defineProperty(window, "innerHeight", {
+    value: 844,
+    configurable: true,
+  });
+  document.documentElement.style.width = "390px";
+
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  const issues: string[] = [];
+  const contentWidth = document.documentElement.scrollWidth;
+
+  if (contentWidth > window.innerWidth) {
+    issues.push(
+      `Content width (${contentWidth}px) exceeds viewport width (${window.innerWidth}px) causing horizontal scrolling`
+    );
+  }
+
+  const viewportMeta = document.querySelector('meta[name="viewport"]');
+  if (!viewportMeta) {
+    issues.push("Missing viewport meta tag");
+  }
+
+  const tapTargets = document.querySelectorAll("a, button, [onclick]");
+  let smallTapTargets = 0;
+  tapTargets.forEach((el) => {
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 48 || rect.height < 48) {
+      smallTapTargets++;
+    }
+  });
+  if (smallTapTargets > 0) {
+    issues.push(`${smallTapTargets} small tap targets (<48px)`);
+  }
+
+  return {
+    viewportWidth: window.innerWidth,
+    simulatedDevice: "iPhone 12 Pro (390px width)",
+    contentWidth,
+    issues,
+  };
+}
+
+function extractOpenGraphData($: cheerio.CheerioAPI): OpenGraphData {
+  const ogData: OpenGraphData = {};
+  const additional: Record<string, string> = {};
+
+  $('meta[property^="og:"]').each((_, el) => {
+    const property = $(el).attr("property")?.replace("og:", "");
+    const content = $(el).attr("content");
+    if (property && content) {
+      switch (property) {
+        case "title":
+          ogData.title = content;
+          break;
+        case "type":
+          ogData.type = content;
+          break;
+        case "image":
+          ogData.image = content;
+          break;
+        case "url":
+          ogData.url = content;
+          break;
+        case "description":
+          ogData.description = content;
+          break;
+        case "site_name":
+          ogData.site_name = content;
+          break;
+        case "locale":
+          ogData.locale = content;
+          break;
+        case "audio":
+          ogData.audio = content;
+          break;
+        case "video":
+          ogData.video = content;
+          break;
+        default:
+          additional[property] = content;
+      }
+    }
+  });
+
+  if (Object.keys(additional).length > 0) {
+    ogData.additionalProperties = additional;
+  }
+
+  return ogData;
+}
+
+function extractTwitterCardData($: cheerio.CheerioAPI) {
+  const cardData: {
+    card?: string;
+    title?: string;
+    description?: string;
+    image?: string;
+  } = {};
+  $('meta[name^="twitter:"]').each((_, el) => {
+    const name = $(el).attr("name")?.replace("twitter:", "");
+    const content = $(el).attr("content");
+    if (name && content) {
+      if (name === "card") cardData.card = content;
+      if (name === "title") cardData.title = content;
+      if (name === "description") cardData.description = content;
+      if (name === "image") cardData.image = content;
+    }
+  });
+  return cardData;
+}
+
 function calculateSEOScore(
   title: { length: number; optimal: boolean },
   description: { length: number; optimal: boolean },
@@ -195,11 +360,13 @@ function calculateSEOScore(
     canonical: string | null;
     lang: string | null;
     schemaMarkup: boolean;
-  }
+  },
+  social: { openGraph?: OpenGraphData; twitterCard?: any }
 ): { score: number; warnings: string[]; suggestions: string[] } {
   let score = 100;
   const warnings: string[] = [];
   const suggestions: string[] = [];
+
   if (title.length === 0) {
     score -= 15;
     warnings.push("Missing title tag");
@@ -298,6 +465,24 @@ function calculateSEOScore(
     suggestions.push("Consider adding schema markup for rich snippets");
   }
 
+  if (!social.openGraph || Object.keys(social.openGraph).length === 0) {
+    score -= 5;
+    suggestions.push("Add OpenGraph metadata for better social sharing");
+  } else {
+    if (!social.openGraph.title) {
+      score -= 1;
+      suggestions.push("Add OpenGraph title for better social sharing");
+    }
+    if (!social.openGraph.description) {
+      score -= 1;
+      suggestions.push("Add OpenGraph description for better social sharing");
+    }
+    if (!social.openGraph.image) {
+      score -= 3;
+      suggestions.push("Add OpenGraph image for better social sharing");
+    }
+  }
+
   score = Math.max(0, Math.min(100, Math.round(score)));
 
   return { score, warnings, suggestions };
@@ -310,7 +495,13 @@ export const analyzeSeo = api<AnalyzeSEORequest, AnalyzeSEOResponse>(
     expose: true,
   },
   async (params) => {
-    const { url, keywords = [], followRedirects = true, depth = 1 } = params;
+    const {
+      url,
+      keywords = [],
+      followRedirects = true,
+      depth = 1,
+      renderMobile = false,
+    } = params;
 
     const startTime = performance.now();
     const warnings: string[] = [];
@@ -358,12 +549,27 @@ export const analyzeSeo = api<AnalyzeSEORequest, AnalyzeSEOResponse>(
           mobile: { friendly: false, viewport: false, tapTargets: false },
           performance: { loadTime: 0, pageSize, requests: 0 },
           structure: { canonical: null, lang: null, schemaMarkup: false },
+          social: {},
           seoScore: 0,
           warnings: ["URL does not return HTML content"],
           suggestions: [],
           error: "Invalid content type",
         };
       }
+
+      const openGraphData = extractOpenGraphData($);
+      const twitterCardData = extractTwitterCardData($);
+
+      let mobileRendering: MobileRendering | undefined;
+      if (renderMobile) {
+        try {
+          mobileRendering = await simulateMobileRendering(html, finalUrl);
+        } catch (error) {
+          console.error("Mobile rendering simulation failed:", error);
+          warnings.push("Failed to simulate mobile rendering");
+        }
+      }
+
       const titleText = $("title").text().trim();
       const titleLength = titleText.length;
       const titleOptimal = titleLength >= 30 && titleLength <= 60;
@@ -426,6 +632,7 @@ export const analyzeSeo = api<AnalyzeSEORequest, AnalyzeSEOResponse>(
           ? favicon
           : new URL(favicon, finalUrl).href,
       };
+
       const {
         score,
         warnings: scoreWarnings,
@@ -448,13 +655,17 @@ export const analyzeSeo = api<AnalyzeSEORequest, AnalyzeSEOResponse>(
           canonical: canonicalUrl,
           lang: htmlLang,
           schemaMarkup: hasSchemaMarkup,
+        },
+        {
+          openGraph: openGraphData,
+          twitterCard: twitterCardData,
         }
       );
 
       warnings.push(...scoreWarnings);
       suggestions.push(...scoreSuggestions);
 
-      return {
+      const result: AnalyzeSEOResponse = {
         serpPreview,
         url: processedUrl,
         finalUrl: finalUrl !== processedUrl ? finalUrl : undefined,
@@ -489,7 +700,10 @@ export const analyzeSeo = api<AnalyzeSEORequest, AnalyzeSEOResponse>(
           density: keywordAnalysis.density,
           prominent: keywordAnalysis.prominent,
         },
-        mobile: mobileAnalysis,
+        mobile: {
+          ...mobileAnalysis,
+          rendering: mobileRendering,
+        },
         performance: {
           loadTime,
           pageSize,
@@ -500,10 +714,21 @@ export const analyzeSeo = api<AnalyzeSEORequest, AnalyzeSEOResponse>(
           lang: htmlLang,
           schemaMarkup: hasSchemaMarkup,
         },
+        social: {
+          openGraph:
+            Object.keys(openGraphData).length > 0 ? openGraphData : undefined,
+          twitterCard:
+            Object.keys(twitterCardData).length > 0
+              ? twitterCardData
+              : undefined,
+        },
+        htmlContent: html,
         seoScore: score,
         warnings: [...new Set(warnings)],
         suggestions: [...new Set(suggestions)],
       };
+
+      return result;
     } catch (error: any) {
       return {
         serpPreview: {
@@ -525,10 +750,12 @@ export const analyzeSeo = api<AnalyzeSEORequest, AnalyzeSEOResponse>(
         mobile: { friendly: false, viewport: false, tapTargets: false },
         performance: { loadTime: 0, pageSize: 0, requests: 0 },
         structure: { canonical: null, lang: null, schemaMarkup: false },
+        social: {},
+        htmlContent: undefined,
         seoScore: 0,
         warnings: ["Failed to fetch URL"],
         suggestions: [],
-        message: error.message,
+        error: error.message,
       };
     }
   }
