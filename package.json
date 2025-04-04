@@ -19,11 +19,13 @@
   "dependencies": {
     "@prisma/client": "^6.5.0",
     "@types/cheerio": "^0.22.35",
+    "@types/jsdom": "^21.1.7",
     "axios": "^1.8.2",
     "bcrypt": "^5.1.1",
     "cheerio": "^1.0.0",
     "encore.dev": "^1.46.5",
     "express": "^4.21.2",
+    "jsdom": "^26.0.0",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.10.0",

@@ -310,12 +310,7 @@ export const analyzeSeo = api<AnalyzeSEORequest, AnalyzeSEOResponse>(
     expose: true,
   },
   async (params) => {
-    const {
-      url,
-      keywords = ["SEO", "website", "analysis"],
-      followRedirects = true,
-      depth = 1,
-    } = params;
+    const { url, keywords = [], followRedirects = true, depth = 1 } = params;
 
     const startTime = performance.now();
     const warnings: string[] = [];
